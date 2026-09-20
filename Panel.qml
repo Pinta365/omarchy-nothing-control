@@ -122,7 +122,8 @@ Panel {
     settings: root.settings
     panelOpen: root.opened
     onNotificationRequested: function (title, body) {
-      Quickshell.execDetached(["notify-send", "-a", "Nothing Ear", title, body])
+      Quickshell.execDetached(
+        ["notify-send", "-a", "Nothing Ear", "-u", "critical", title, body])
     }
   }
 

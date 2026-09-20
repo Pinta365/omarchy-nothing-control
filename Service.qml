@@ -25,6 +25,12 @@ Item {
   readonly property string configuredAddress: String(setting("deviceAddress", "")).trim()
   readonly property int lowBatteryThreshold: intSetting("lowBatteryThreshold", 20, 5, 50)
   readonly property int keepaliveSec: intSetting("keepaliveSec", 60, 15, 600)
+  // 0 leaves the channel completely free while the panel is closed. Anything
+  // else is floored at a minute: a closed panel must not poll aggressively.
+  readonly property int backgroundPollSec: {
+    var n = intSetting("backgroundPollSec", 300, 0, 3600)
+    return n > 0 && n < 60 ? 60 : n
+  }
   readonly property bool notifyOnLowBattery: setting("notifyOnLowBattery", true) === true
 
   // Re-arm a low battery warning only once the level recovers this far past
@@ -360,14 +366,16 @@ Item {
     onTriggered: if (root.bluezConnected && !root.protocol) root.refresh()
   }
 
-  // The only recurring poll, and only while the panel is open. BlueZ cannot
-  // see a noise mode changed by a pinch gesture or the phone, so an open
-  // panel would otherwise drift. A closed panel costs nothing.
+  // The only recurring poll. Frequent while the panel is open, because BlueZ
+  // cannot see a noise mode changed by a pinch gesture or the phone. Slow while
+  // it is closed, which is what keeps the bar level current and is the only
+  // thing that lets the low battery check run when nobody is looking.
   Timer {
     // Fallback only. A live watch streams its own battery re-reads, so this
     // runs solely when the watch is not up.
-    interval: root.keepaliveSec * 1000
-    running: root.panelOpen && root.bluezConnected && !root.watching
+    interval: (root.panelOpen ? root.keepaliveSec : root.backgroundPollSec) * 1000
+    running: root.bluezConnected && !root.watching
+             && (root.panelOpen || root.backgroundPollSec > 0)
     repeat: true
     onTriggered: root.refresh()
   }
