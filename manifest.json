@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "id": "pinta365.nothing-control",
+  "name": "Nothing Audio Control",
+  "version": "0.1.0",
+  "author": "Pinta365",
+  "license": "MIT",
+  "description": "Nothing and CMF earbuds in the Omarchy bar: per-earbud and case battery, noise control, equaliser and bass enhance.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Nothing Audio Control",
+    "description": "Battery for each earbud and the case, noise control, equaliser presets and bass enhance.",
+    "category": "Audio",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "deviceAddress": "",
+      "hideWhenDisconnected": true,
+      "showBatteryText": true,
+      "lowBatteryThreshold": 20,
+      "notifyOnLowBattery": true,
+      "keepaliveSec": 60
+    },
+    "schema": [
+      {
+        "key": "deviceAddress",
+        "type": "string",
+        "label": "Bluetooth address",
+        "description": "Leave empty to use the first paired Nothing device.",
+        "defaultValue": ""
+      },
+      {
+        "key": "hideWhenDisconnected",
+        "type": "boolean",
+        "label": "Hide the icon when the earbuds are disconnected",
+        "defaultValue": true
+      },
+      {
+        "key": "showBatteryText",
+        "type": "boolean",
+        "label": "Show the lowest battery level next to the icon",
+        "defaultValue": true
+      },
+      {
+        "key": "lowBatteryThreshold",
+        "type": "integer",
+        "label": "Low battery threshold (%)",
+        "min": 5,
+        "max": 50,
+        "step": 5,
+        "defaultValue": 20
+      },
+      {
+        "key": "notifyOnLowBattery",
+        "type": "boolean",
+        "label": "Send a notification on low battery",
+        "defaultValue": true
+      },
+      {
+        "key": "keepaliveSec",
+        "type": "integer",
+        "label": "Refresh interval while the panel is open (seconds)",
+        "min": 15,
+        "max": 600,
+        "step": 15,
+        "defaultValue": 60
+      }
+    ]
+  }
+}

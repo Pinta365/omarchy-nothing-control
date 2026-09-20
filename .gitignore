@@ -1,0 +1,13 @@
+# Working notes: measured facts, dead ends and protocol archaeology. Useful
+# locally, but they are a lab notebook rather than part of the plugin, so the
+# durable findings live in README.md instead.
+knowledge/
+
+# Python bytecode from running the helper or its tests in place.
+__pycache__/
+*.py[cod]
+
+# Editor and OS droppings.
+*.swp
+*~
+.DS_Store
