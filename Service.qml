@@ -57,7 +57,7 @@ Item {
   // same on every implementation surveyed. Equaliser and bass are withheld by
   // the helper rather than guessed, so their rows simply do not appear.
   readonly property bool modelKnown: status.model ? status.model.known === true : false
-  readonly property string reportScript: pluginDir + "report-device.sh"
+  readonly property string reportScript: pluginDir + "tools/report-device.sh"
 
   function reportDevice() {
     // Runs in a terminal on purpose: the report is shown to the user, and

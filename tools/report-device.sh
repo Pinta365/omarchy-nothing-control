@@ -7,7 +7,7 @@
 set -uo pipefail
 
 REPO="Pinta365/omarchy-nothing-control"
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPORT="$(mktemp -t nothing-control-report-XXXXXX.md)"
 
 printf 'Probing the earbuds. This sweeps every read-only opcode and takes about a minute.\n\n'

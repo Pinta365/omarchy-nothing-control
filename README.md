@@ -26,13 +26,13 @@ apply to only some model bases. A device we have not confirmed would accept thos
 and apply something other than the label says, so those controls stay hidden
 rather than lie.
 
-If your device shows as unverified, the panel offers **Help add support**. It
+If your device shows as unverified, the panel offers **Help us add support**. It
 sweeps every read-only opcode, shows you the result, and only opens an issue if
 you agree. The device-info block is redacted first because it carries your
 serial number and Bluetooth address. You can run it directly too:
 
 ```sh
-./report-device.sh
+./tools/report-device.sh
 ```
 
 Mapping a new model needs one more thing the probe cannot do: someone setting
@@ -69,7 +69,7 @@ Service.qml            session lifecycle, state, optimistic actions
 Model.js               parsing and formatting -- no QML imports, unit tested
 NothingEarIcon.qml     drawn earbud silhouette
 helper/nothing_ear.py  RFCOMM client, stdlib only
-report-device.sh       probe an unmapped device and offer to file an issue
+tools/report-device.sh probe an unmapped device and offer to file an issue
 tests/                 deno test over Model.js, unittest over the protocol
 ```
 
@@ -90,8 +90,8 @@ cannot open a connection at all.
 ## Development
 
 ```sh
-./dev.sh             # sync into ~/.config/omarchy/plugins/ and validate
-./dev.sh --restart   # ...and restart the shell (needed for structural changes)
+./tools/dev.sh             # sync into ~/.config/omarchy/plugins/ and validate
+./tools/dev.sh --restart   # ...and restart the shell (needed for structural changes)
 
 deno test --allow-read tests/                    # parsing and formatting
 /usr/bin/python3 -m unittest discover -s tests   # wire protocol

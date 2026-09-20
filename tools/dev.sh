@@ -7,7 +7,7 @@
 set -euo pipefail
 
 PLUGIN_ID="pinta365.nothing-control"
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 
 mkdir -p "$DEST"
@@ -17,6 +17,7 @@ rsync -a --delete --delete-excluded \
   --exclude 'tests' \
   --exclude 'knowledge' \
   --exclude 'dev.sh' \
+  --exclude 'tools/dev.sh' \
   --exclude 'README.md' \
   --exclude 'LICENSE' \
   --exclude '.gitignore' \
