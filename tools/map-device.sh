@@ -15,6 +15,27 @@ MAPPINGS="$(mktemp -t nothing-control-eq-XXXXXX.json)"
 EQREAD="$(mktemp -t nothing-control-read-XXXXXX.json)"
 PROGRESS="$(mktemp -t nothing-control-progress-XXXXXX.txt)"
 
+# Colour only on a terminal that reports it, and never with NO_COLOR set.
+if [[ -t 1 && -z "${NO_COLOR:-}" ]] && command -v tput >/dev/null 2>&1 \
+   && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
+  C_BOLD="$(tput bold)"; C_DIM="$(tput dim)"; C_RESET="$(tput sgr0)"
+  C_HEAD="$(tput setaf 6)$(tput bold)"; C_OK="$(tput setaf 2)"
+  C_WARN="$(tput setaf 3)"; C_ERR="$(tput setaf 1)"; C_ASK="$(tput setaf 6)"
+else
+  C_BOLD=""; C_DIM=""; C_RESET=""; C_HEAD=""; C_OK=""; C_WARN=""; C_ERR=""; C_ASK=""
+fi
+
+STEP=0
+heading() {
+  STEP=$((STEP + 1))
+  printf '\n%sStep %d of 3  %s%s\n' "$C_HEAD" "$STEP" "$1" "$C_RESET"
+}
+note() { printf '%s%s%s\n' "$C_DIM" "$1" "$C_RESET"; }
+good() { printf '%s  OK  %s%s\n' "$C_OK" "$1" "$C_RESET"; }
+warn() { printf '%s  !   %s%s\n' "$C_WARN" "$1" "$C_RESET"; }
+oops() { printf '%s  x   %s%s\n' "$C_ERR" "$1" "$C_RESET"; }
+ask() { local answer; read -rp "$(printf '%s%s%s ' "$C_ASK" "$1" "$C_RESET")" answer; REPLY_TEXT="$answer"; }
+
 SPINNER_PID=""
 
 # Only on a terminal: piped output would get a smear of carriage returns.
@@ -60,12 +81,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf '%s\n\n' "This checks a new device without changing its settings."
-printf '%s\n\n' "Close the panel and Nothing X before each reading: only one app can use the control channel."
-printf '%s\n\n' "The bar also checks the battery every few minutes. If a read fails as busy, just try it again."
-printf '%s\n' "The probe sweeps every read-only opcode and takes about a minute."
-read -rp "Press enter to start it. "
-printf '\n'
+printf '\n%sNothing device mapping%s\n' "$C_BOLD" "$C_RESET"
+note "Checks a new device and changes nothing on it."
+note "Close the panel and Nothing X first: only one app can use the control channel."
+note "The bar also checks the battery every few minutes; if a read fails as busy, try again."
+
+heading "Probe"
+note "Sweeps every read-only opcode. Takes about a minute."
+ask "Press enter to start it."
 
 /usr/bin/python3 "$HELPER" probe --progress > "$REPORT" 2> "$PROGRESS" &
 probe_job=$!
@@ -75,13 +98,14 @@ probe_rc=$?
 stop_spinner
 
 if [[ $probe_rc -ne 0 ]]; then
-  printf 'The probe failed. Are the earbuds connected, and is the panel closed?\n\n'
+  oops "The probe failed. Are the earbuds connected, and is the panel closed?"
+  printf '\n'
   cat "$REPORT"
   grep -v '^[0-9]\+/[0-9]\+$' "$PROGRESS"
-  read -rp 'Press enter to close. '
+  ask "Press enter to close."
   exit 1
 fi
-printf 'Probe complete.\n'
+good "Probe complete"
 
 /usr/bin/python3 "$HELPER" status > "$STATUS" &
 status_job=$!
@@ -91,22 +115,24 @@ status_rc=$?
 stop_spinner
 
 if [[ $status_rc -ne 0 ]]; then
-  printf 'Could not read the device status after probing.\n'
-  read -rp 'Press enter to close. '
+  oops "Could not read the device status after probing."
+  ask "Press enter to close."
   exit 1
 fi
+good "Device identified"
 
-printf '%s\n' "Mapping the equaliser is optional, and it is the one thing the probe cannot"
-printf '%s\n' "do on its own: each preset has to be chosen in Nothing X and read back here."
-printf '%s\n\n' "Say no to go straight to the report."
+heading "Equaliser (optional)"
+note "The one thing the probe cannot do alone: each preset has to be chosen in"
+note "Nothing X and read back here. Say no to go straight to the report."
 
 printf '{}' > "$MAPPINGS"
 
-read -rp "Map equaliser presets now? [y/N] " reply
+ask "Map equaliser presets now? [y/N]"
+reply="$REPLY_TEXT"
 if [[ ${reply,,} == "y" ]]; then
-  printf '\n%s\n' "For each preset: say which one it is, then select it in Nothing X and"
-  printf '%s\n' "close the app. Nothing is assumed about which presets your device has, so"
-  printf '%s\n' "if yours is not in the list, just type its name."
+  printf '\n'
+  note "Say which preset it is, then select it in Nothing X and close the app."
+  note "If yours is not in the list, type its name instead."
 fi
 
 # Named before it is read, so the prompt can say which preset to go and select.
@@ -121,7 +147,8 @@ print("Which preset are you mapping?")
 for index, (_, text) in enumerate(ne.STANDARD_PRESETS, 1):
   print("  %d) %s" % (index, text))
 MENU
-  read -rp "Number, or the name your app uses: " choice
+  ask "Number, or the name your app uses:"
+  choice="$REPLY_TEXT"
   if ! chosen="$(/usr/bin/python3 - "$HERE/helper" "$MAPPINGS" "$choice" <<'RESOLVE'
 import json
 import re
@@ -150,11 +177,11 @@ with open(path, encoding="utf-8") as stream:
 print("%s\t%s" % (name, label))
 RESOLVE
   )"; then
-    printf 'Not recorded.\n'
+    warn "Not recorded."
   else
     name="${chosen%%$'\t'*}"
     label="${chosen#*$'\t'}"
-    read -rp "Now select \"$label\" in Nothing X, close the app, then press enter here. "
+    ask "Now select \"$label\" in Nothing X, close the app, then press enter."
 
     /usr/bin/python3 "$HELPER" read-eq > "$EQREAD" 2>/dev/null &
     eq_job=$!
@@ -164,7 +191,7 @@ RESOLVE
     stop_spinner
 
     if [[ $eq_rc -ne 0 ]]; then
-      printf 'Could not read the equaliser value. Is Nothing X closed?\n'
+      oops "Could not read the equaliser value. Is Nothing X closed?"
     elif ! /usr/bin/python3 - "$MAPPINGS" "$name" "$label" "$(cat "$EQREAD")" <<'STORE'
 import json
 import sys
@@ -185,10 +212,11 @@ with open(path, "r+", encoding="utf-8") as stream:
 print('Recorded "%s" as id %d.' % (label, raw))
 STORE
     then
-      printf 'Not recorded.\n'
+      warn "Not recorded."
     fi
   fi
-  read -rp "Map another preset? [y/N] " reply
+  ask "Map another preset? [y/N]"
+  reply="$REPLY_TEXT"
 done
 
 /usr/bin/python3 - "$STATUS" "$MAPPINGS" "$REPORT" <<'PY'
@@ -211,10 +239,12 @@ with open(report_path, "a", encoding="utf-8") as stream:
     stream.write("No equaliser presets were verified in this run.\n")
 PY
 
+heading "Report"
 printf '\n%s\n' "$(cat "$REPORT")"
-printf '\n---\nSaved to: %s\n' "$REPORT"
+printf '\n%s---%s\n' "$C_DIM" "$C_RESET"
+note "Saved to: $REPORT"
 if command -v wl-copy >/dev/null 2>&1; then
-  wl-copy < "$REPORT" && printf 'Copied to the clipboard.\n'
+  wl-copy < "$REPORT" && good "Copied to the clipboard"
 fi
 
 if [[ $(/usr/bin/python3 - "$MAPPINGS" <<'PY'
@@ -224,7 +254,9 @@ with open(sys.argv[1], encoding="utf-8") as stream:
   print("yes" if json.load(stream) else "no")
 PY
 ) == "yes" ]]; then
-  read -rp "Apply the confirmed EQ mapping as a local hotfix? [y/N] " reply
+  printf '\n'
+  ask "Apply the confirmed EQ mapping as a local hotfix? [y/N]"
+  reply="$REPLY_TEXT"
   hotfix_rc=0
   if [[ ${reply,,} == "y" ]]; then
     /usr/bin/python3 - "$STATUS" "$MAPPINGS" \
@@ -281,34 +313,35 @@ with open(output_path, "w", encoding="utf-8") as stream:
 PY
     hotfix_rc=$?
     if [[ $hotfix_rc -eq 0 ]]; then
-      printf 'Local hotfix saved. Reopen the panel to load the confirmed EQ controls.\n'
+      good "Local hotfix saved. Reopen the panel to load the confirmed EQ controls."
     elif [[ $hotfix_rc -eq 3 ]]; then
-      printf 'No hotfix needed, for the reason above. The report is still below.\n'
+      note "No hotfix needed, for the reason above."
     else
-      printf 'Could not save the local hotfix; the report is still below.\n'
+      warn "Could not save the local hotfix."
     fi
   fi
 else
-  printf 'No EQ mappings were confirmed, so no local hotfix is available.\n'
+  note "No EQ mappings were confirmed, so no local hotfix is available."
 fi
 
 TITLE="Device support: $(sed -n 's/^| Bluetooth name | `\(.*\)` |$/\1/p' "$REPORT" | head -1)"
 
-printf '\nRead the report above before sending it. It contains your device state.\n\n'
+printf '\n'
+warn "Read the report above before sending it. It contains your device state."
 
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  read -rp "Open an issue on $REPO as $(gh api user --jq .login 2>/dev/null)? [y/N] " reply
-  if [[ ${reply,,} == "y" ]]; then
+  ask "Open an issue on $REPO as $(gh api user --jq .login 2>/dev/null)? [y/N]"
+  if [[ ${REPLY_TEXT,,} == "y" ]]; then
     gh issue create --repo "$REPO" --title "$TITLE" --body-file "$REPORT" \
-      && printf '\nThank you. That is enough to map the device.\n'
+      && good "Thank you. That is enough to map the device."
   else
-    printf '\nNothing sent. The report is still at %s\n' "$REPORT"
+    note "Nothing sent. The report is still at $REPORT"
   fi
 else
-  printf 'GitHub CLI is not set up, so nothing can be posted from here.\n'
-  printf 'Open an issue and paste the report (it is on your clipboard):\n'
-  printf '  https://github.com/%s/issues/new\n' "$REPO"
+  note "GitHub CLI is not set up, so nothing can be posted from here."
+  note "Open an issue and paste the report (it is on your clipboard):"
+  note "  https://github.com/$REPO/issues/new"
 fi
 
 printf '\n'
-read -rp 'Press enter to close. '
+ask "Press enter to close."
