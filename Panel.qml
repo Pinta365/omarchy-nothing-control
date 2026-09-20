@@ -363,7 +363,7 @@ Panel {
             // A Chip rather than PanelActionButton: that one sizes itself to a
             // single glyph and clips a text label.
             Chip {
-              label: "Help add support"
+              label: "Help us add support"
               onActivated: {
                 ear.reportDevice()
                 root.close()
