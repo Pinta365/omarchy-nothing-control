@@ -53,16 +53,16 @@ Item {
   readonly property bool deviceKnown: address !== ""
 
   readonly property bool protocol: status.protocol === true
-  // An unverified device still gets battery and noise control -- those are the
-  // same on every implementation surveyed. Equaliser and bass are withheld by
-  // the helper rather than guessed, so their rows simply do not appear.
-  readonly property bool modelKnown: status.model ? status.model.known === true : false
-  readonly property string reportScript: pluginDir + "tools/report-device.sh"
+  // Battery and noise control are the same everywhere, so every device gets
+  // them. Equaliser and bass appear only for values the helper reports mapped.
+  readonly property string modelSupport: status.model
+    ? String(status.model.support || "unknown") : "unknown"
+  readonly property bool needsSupport: modelSupport !== "verified"
+  readonly property string mapScript: pluginDir + "tools/map-device.sh"
 
-  function reportDevice() {
-    // Runs in a terminal on purpose: the report is shown to the user, and
-    // nothing is posted without them agreeing to it there.
-    Quickshell.execDetached(["xdg-terminal-exec", "--", "bash", reportScript])
+  function mapDevice() {
+    // Runs in a terminal on purpose: nothing is posted or written without consent.
+    Quickshell.execDetached(["xdg-terminal-exec", "--", "bash", mapScript])
   }
   readonly property bool busy: statusProcess.running || actionProcess.running
   readonly property int barLevel: Model.lowestLevel(status)

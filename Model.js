@@ -55,9 +55,9 @@ function defaultStatus() {
     firmware: "",
     battery: {},
     anc: { mode: "", level: null, available: false },
-    eq: { preset: "", available: false },
+    eq: { preset: "", presets: [], available: false },
     bass: { enabled: false, level: null, available: false },
-    model: { base: "unknown", name: "", known: false },
+    model: { base: "unknown", name: "", known: false, support: "unknown" },
     latency: { enabled: false, available: false },
     inEar: { enabled: false, available: false },
     error: "",
@@ -123,6 +123,7 @@ function parseStatus(raw) {
   var eq = parsed.eq && typeof parsed.eq === "object" ? parsed.eq : {}
   status.eq = {
     preset: isKnownEqPreset(eq.preset) ? eq.preset : "",
+    presets: knownEqPresets(eq.presets),
     available: eq.available === true
   }
 
@@ -136,7 +137,9 @@ function parseStatus(raw) {
   status.model = {
     base: String(model.base || "unknown"),
     name: String(model.name || ""),
-    known: model.known === true
+    known: model.known === true,
+    support: ["unknown", "identified", "verified"].includes(String(model.support))
+      ? String(model.support) : "unknown"
   }
   status.latency = normalizeToggle(parsed.latency)
   status.inEar = normalizeToggle(parsed.inEar)
@@ -171,6 +174,29 @@ function isKnownEqPreset(preset) {
     if (EQ_PRESETS[i].key === preset) return true
   }
   return false
+}
+
+// Only what the helper reports as mapped. Anything else would be a guess.
+function knownEqPresets(presets) {
+  var out = []
+  if (!Array.isArray(presets)) return out
+  for (var i = 0; i < presets.length; i++) {
+    if (isKnownEqPreset(presets[i]) && out.indexOf(presets[i]) === -1) {
+      out.push(presets[i])
+    }
+  }
+  return out
+}
+
+// Rows in the order the panel lists them, limited to the confirmed presets.
+function eqPresetsFor(status) {
+  var names = status && status.eq ? status.eq.presets : null
+  var out = []
+  if (!names) return out
+  for (var i = 0; i < EQ_PRESETS.length; i++) {
+    if (names.indexOf(EQ_PRESETS[i].key) !== -1) out.push(EQ_PRESETS[i])
+  }
+  return out
 }
 
 function ancLabel(mode) {

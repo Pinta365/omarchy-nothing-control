@@ -5,7 +5,9 @@ Standard library only, matching the helper itself:
 """
 
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helper"))
@@ -172,6 +174,12 @@ class ModelDetection(unittest.TestCase):
     for name in ("CMF Buds 2", "Nothing Ear (3)", "", None):
       self.assertEqual(ne.resolve_model(name)["base"], "unknown")
 
+  def test_support_states_distinguish_unknown_and_incomplete_models(self):
+    self.assertEqual(ne.support_state(ne.UNKNOWN_MODEL), "unknown")
+    self.assertEqual(ne.support_state({"base": "B999"}), "identified")
+    self.assertEqual(ne.support_state({"base": "B999", "support": "verified"}),
+                     "verified")
+
   def test_unknown_model_refuses_preset_names(self):
     self.assertRaises(ValueError, ne.eq_wire_id, "more_bass", ne.UNKNOWN_MODEL)
 
@@ -182,6 +190,59 @@ class ModelDetection(unittest.TestCase):
   def test_unknown_model_reports_no_preset_names(self):
     self.assertEqual(ne.parse_eq(bytes([3]), ne.UNKNOWN_MODEL)["preset"], "unknown")
     self.assertEqual(ne.parse_eq(bytes([3]), ne.UNKNOWN_MODEL)["raw"], 3)
+
+  def test_a_reading_carries_the_presets_the_model_maps(self):
+    self.assertEqual(ne.parse_eq(bytes([3]), EAR_A)["presets"],
+                     ["balanced", "custom", "dirac", "more_bass",
+                      "more_treble", "voice"])
+    self.assertEqual(ne.parse_eq(bytes([3]), {"eq": {"balanced": 0, "more_bass": 3}})["presets"],
+                     ["balanced", "more_bass"])
+    self.assertEqual(ne.parse_eq(bytes([3]), ne.UNKNOWN_MODEL)["presets"], [])
+
+
+class LocalModelOverlay(unittest.TestCase):
+  """A bad entry must be skipped, not raised: resolve_model runs on every
+  command, so a traceback takes the whole panel dark."""
+
+  def overlay(self, contents):
+    directory = tempfile.mkdtemp()
+    self.addCleanup(shutil.rmtree, directory, True)
+    with open(os.path.join(directory, "models.local.json"), "w",
+              encoding="utf-8") as stream:
+      stream.write(contents)
+    original_file, original_models = ne.__file__, ne.MODELS
+    self.addCleanup(setattr, ne, "MODELS", original_models)
+    self.addCleanup(setattr, ne, "__file__", original_file)
+    ne.__file__ = os.path.join(directory, "nothing_ear.py")
+    ne.MODELS = ne.load_local_models(original_models)
+
+  def test_a_confirmed_mapping_is_overlaid(self):
+    self.overlay('[{"base": "local:cmf buds 2", "name": "CMF Buds 2",'
+                 ' "pattern": "^cmf buds 2$", "channel": 15,'
+                 ' "support": "identified", "eq": {"balanced": 0}}]')
+    found = ne.resolve_model("CMF Buds 2")
+    self.assertEqual(found["eq"], {"balanced": 0})
+    self.assertEqual(ne.support_state(found), "identified")
+
+  def test_malformed_entries_are_skipped_rather_than_raised(self):
+    for contents in ('[{"base": "B999", "eq": {}}]',
+                     '[{"base": "B998", "pattern": "cmf buds ((2"}]',
+                     '[{"base": "B997", "pattern": null}]',
+                     '[{"pattern": "^cmf buds 2$"}]',
+                     '[["not", "a", "dict"]]',
+                     '{"base": "B995"}',
+                     'not json at all'):
+      self.overlay(contents)
+      self.assertEqual(ne.resolve_model("CMF Buds 2")["base"], "unknown",
+                       msg=contents)
+      self.assertEqual(ne.resolve_model("Nothing Ear (a)")["base"], "B162",
+                       msg=contents)
+
+  def test_an_overlay_merges_into_a_shipped_model(self):
+    self.overlay('[{"base": "B162", "eq": {"balanced": 0}}]')
+    found = ne.resolve_model("Nothing Ear (a)")
+    self.assertEqual(found["eq"], {"balanced": 0})
+    self.assertEqual(found["bass_max"], 5)
 
 
 class Bass(unittest.TestCase):

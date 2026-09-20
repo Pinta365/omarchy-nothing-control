@@ -11,6 +11,9 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 
 mkdir -p "$DEST"
+
+# models.local.json lives only in the plugin directory, and --delete-excluded
+# deletes excluded files there. Protect keeps it; exclude stops it being pushed.
 rsync -a --delete --delete-excluded \
   --exclude '.git' \
   --exclude '__pycache__' \
@@ -18,6 +21,8 @@ rsync -a --delete --delete-excluded \
   --exclude 'knowledge' \
   --exclude 'dev.sh' \
   --exclude 'tools/dev.sh' \
+  --filter 'protect helper/models.local.json' \
+  --exclude 'helper/models.local.json' \
   --exclude 'README.md' \
   --exclude 'LICENSE' \
   --exclude '.gitignore' \

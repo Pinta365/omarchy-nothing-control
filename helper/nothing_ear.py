@@ -94,6 +94,7 @@ MODELS = [
     "name": "Nothing Ear (a)",
     "pattern": r"nothing ear \(a\)",
     "channel": 15,
+    "support": "verified",
     # Verified id by id against the Nothing X app, 2026-09-20. Id 4 is Dirac
     # Opteo, which the app can display but not select.
     "eq": {
@@ -107,6 +108,61 @@ MODELS = [
     "bass_max": 5,
   },
 ]
+
+
+def valid_pattern(pattern):
+  if not isinstance(pattern, str):
+    return False
+  try:
+    re.compile(pattern)
+  except re.error:
+    return False
+  return True
+
+
+def load_local_models(models):
+  """Overlay confirmed models from models.local.json.
+
+  Hand-editable, so a bad entry is skipped: every command resolves a model
+  first, and raising here would take battery and noise control down with it.
+  """
+  path = os.path.join(os.path.dirname(__file__), "models.local.json")
+  try:
+    with open(path, encoding="utf-8") as stream:
+      overrides = json.load(stream)
+  except (FileNotFoundError, json.JSONDecodeError, OSError):
+    return models
+  if not isinstance(overrides, list):
+    return models
+
+  merged = list(models)
+  for override in overrides:
+    if not isinstance(override, dict):
+      continue
+    pattern = override.get("pattern")
+    if pattern is not None and not valid_pattern(pattern):
+      continue
+    entry = dict(override)
+    if "name" in entry and not isinstance(entry["name"], str):
+      entry["name"] = ""
+    if "channel" in entry and not isinstance(entry["channel"], int):
+      entry["channel"] = RFCOMM_CHANNEL
+
+    base = entry.get("base")
+    index = next((i for i, model in enumerate(merged)
+                  if (base and model.get("base") == base)
+                  or (pattern and model.get("pattern") == pattern)), None)
+    if index is None:
+      # Matched and dialled on its own, so it has to carry every indexed field.
+      if not valid_pattern(pattern) or not isinstance(base, str) or not base:
+        continue
+      merged.append({"name": "", "channel": RFCOMM_CHANNEL, **entry})
+    else:
+      merged[index] = {**merged[index], **entry}
+  return merged
+
+
+MODELS = load_local_models(MODELS)
 
 UNKNOWN_MODEL = {
   "base": "unknown",
@@ -124,6 +180,14 @@ def resolve_model(device_name):
     if re.search(model["pattern"], lowered):
       return model
   return UNKNOWN_MODEL
+
+
+def support_state(model):
+  if model.get("base") == "unknown":
+    return "unknown"
+  return model.get("support", "identified")
+
+
 def eq_names_for(model):
   table = model.get("eq") or {}
   return {value: name for name, value in table.items()}
@@ -361,11 +425,14 @@ def parse_anc(payload):
 
 
 def parse_eq(payload, model):
+  # `presets` is what the panel may offer: an overlay can confirm only some.
+  presets = sorted(model.get("eq") or {})
   if not payload:
-    return {"preset": "", "raw": None, "available": False}
+    return {"preset": "", "raw": None, "presets": presets, "available": False}
   return {
     "preset": eq_names_for(model).get(payload[0], "unknown"),
     "raw": payload[0],
+    "presets": presets,
     "available": True,
   }
 
@@ -592,9 +659,8 @@ def read_status(session, address, model):
   # whether the read succeeded, rather than on a hardcoded model table.
   status["anc"] = parse_anc(session.request(CMD_ANC_GET, DIR_GET) or b"")
 
-  # Equaliser and bass stay dark on an unverified model. The device will
-  # happily answer and accept writes; the ids just would not mean what the
-  # labels say, which is worse than offering nothing.
+  # Gated on the model having a mapping, not on the device answering: an
+  # unmapped device answers and accepts writes, the ids just mean something else.
   if model.get("eq"):
     status["eq"] = parse_eq(session.request(CMD_EQ_GET, DIR_GET) or b"", model)
   if model.get("bass_max"):
@@ -617,7 +683,7 @@ def blank_status(address, bluez):
     "firmware": "",
     "battery": {},
     "anc": {"mode": "", "raw": None, "level": None, "available": False},
-    "eq": {"preset": "", "raw": None, "available": False},
+    "eq": {"preset": "", "raw": None, "presets": [], "available": False},
     "bass": {"enabled": False, "level": None, "available": False},
     "model": {"base": "unknown", "name": "", "known": False},
     "latency": {"enabled": False, "available": False},
@@ -789,6 +855,7 @@ def run(args):
     "base": model["base"],
     "name": model["name"],
     "known": model["base"] != "unknown",
+    "support": support_state(model),
   }
 
   # Validate before looking at the link, so a typo is reported as a typo
@@ -843,6 +910,9 @@ def run(args):
         session.request(CMD_EQ_SET, DIR_SET, bytes([eq_wire_id(args.value, model), 0]))
         time.sleep(RETRY_AFTER_WRITE)
         result["eq"] = parse_eq(session.request(CMD_EQ_GET, DIR_GET) or b"", model)
+      elif args.command == "read-eq":
+        result["eq"] = parse_eq(
+          session.request(CMD_EQ_GET, DIR_GET) or b"", {"eq": {}})
       elif args.command == "set-bass" and not model.get("bass_max"):
         result["ok"] = False
         result["error"] = ("bass enhance is not mapped for this device (%s)"
@@ -911,8 +981,8 @@ def run(args):
 def main(argv=None):
   parser = argparse.ArgumentParser(description="Nothing Ear (a) control helper")
   parser.add_argument("command", nargs="?", default="status",
-                      choices=["status", "set-anc", "set-eq", "set-bass", "set-latency",
-                               "set-in-ear", "listen", "watch", "probe"])
+                      choices=["status", "set-anc", "set-eq", "read-eq", "set-bass",
+                               "set-latency", "set-in-ear", "listen", "watch", "probe"])
   parser.add_argument("value", nargs="?", default="")
   parser.add_argument("--device", default="", help="Bluetooth address; auto-detected when omitted")
   parser.add_argument("--channel", type=int, default=0,

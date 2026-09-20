@@ -41,13 +41,14 @@ Panel {
   property bool cursorActive: false
 
   readonly property var ancModes: Model.ANC_MODES
-  readonly property var eqPresets: Model.EQ_PRESETS
+  readonly property var eqPresets: Model.eqPresetsFor(ear.status)
   readonly property var toggles: Model.toggleRows(ear.status)
+  readonly property bool eqAvailable: ear.status.eq.available && eqPresets.length > 0
 
   readonly property var sections: {
     var out = []
     if (ear.status.anc.available) out.push("anc")
-    if (ear.status.eq.available) out.push("eq")
+    if (root.eqAvailable) out.push("eq")
     if (toggles.length > 0) out.push("options")
     return out
   }
@@ -272,11 +273,11 @@ Panel {
             }
           }
 
-          PanelSeparator { width: parent.width; visible: ear.status.eq.available }
+          PanelSeparator { width: parent.width; visible: root.eqAvailable }
 
           PanelSectionHeader {
             width: parent.width
-            visible: ear.status.eq.available
+            visible: root.eqAvailable
             text: "Equaliser"
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -287,7 +288,7 @@ Panel {
             spacing: Style.space(6)
 
             Repeater {
-              model: ear.status.eq.available ? root.eqPresets : []
+              model: root.eqAvailable ? root.eqPresets : []
               Chip {
                 label: modelData.label
                 selected: ear.eqPreset === modelData.key
@@ -333,27 +334,29 @@ Panel {
             }
           }
 
-          PanelSeparator { width: parent.width; visible: !ear.modelKnown && ear.protocol }
+          PanelSeparator { width: parent.width; visible: ear.needsSupport && ear.protocol }
 
-          // Unverified device: say what is missing and why, and make helping
-          // a single click rather than a bug report the user has to compose.
+          // Contributing as one guided flow, not a bug report to compose.
           Column {
             width: parent.width
-            visible: !ear.modelKnown && ear.protocol
+            visible: ear.needsSupport && ear.protocol
             spacing: Style.space(6)
 
             PanelSectionHeader {
               width: parent.width
-              text: "Unverified device"
+              text: ear.modelSupport === "unknown" ? "Unverified device" : "Support still being verified"
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
 
             Text {
               width: parent.width
-              text: "Battery and noise control work on every Nothing and CMF model. "
-                    + "Equaliser and bass use different values per model, so they are "
-                    + "hidden until this one is confirmed."
+              text: ear.modelSupport === "unknown"
+                ? "Battery and noise control work on every Nothing and CMF model. "
+                  + "Equaliser and bass use different values per model, so they are "
+                  + "hidden until this one is confirmed."
+                : "Some controls are still hidden because their values have not been "
+                  + "verified for this model."
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -363,9 +366,9 @@ Panel {
             // A Chip rather than PanelActionButton: that one sizes itself to a
             // single glyph and clips a text label.
             Chip {
-              label: "Help us add support"
+              label: ear.modelSupport === "unknown" ? "Help us add support" : "Help us finish support"
               onActivated: {
-                ear.reportDevice()
+                ear.mapDevice()
                 root.close()
               }
             }

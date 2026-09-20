@@ -9,36 +9,48 @@ Plugin id: `pinta365.nothing-control`. Status: in development.
 
 ## Device support
 
-Verified devices get everything. Everything else gets the parts that are the
-same across every implementation surveyed, and nothing that is guessed.
+A device is in one of three states, and gets exactly what that state has
+established — nothing that is guessed.
 
-| | verified | unverified |
-| --- | --- | --- |
-| Battery, noise control | yes | yes |
-| Low latency, wear detection | yes | yes |
-| Equaliser, bass enhance | yes | **hidden** |
+- **Verified** — mapped id by id against the Nothing X app.
+- **Identified** — recognised, with some values confirmed and others not. This
+  is what a local mapping produces.
+- **Unidentified** — not recognised, so only the parts that are the same across
+  every implementation surveyed.
+
+| | verified | identified | unidentified |
+| --- | --- | --- | --- |
+| Battery, noise control | yes | yes | yes |
+| Low latency, wear detection | yes | yes | yes |
+| Equaliser | yes | confirmed presets only | **hidden** |
+| Bass enhance | yes | **hidden** | **hidden** |
 
 **Verified:** Nothing Ear (a) — `B162`.
 
 Equaliser ids and the bass encoding are genuinely per model. CMF uses a
 different preset set entirely, and the bass `level * 2` encoding is known to
-apply to only some model bases. A device we have not confirmed would accept those writes
-and apply something other than the label says, so those controls stay hidden
-rather than lie.
+apply to only some model bases. A device we have not confirmed would accept
+those writes and apply something other than the label says, so those controls
+stay hidden rather than lie.
 
-If your device shows as unverified, the panel offers **Help us add support**. It
-sweeps every read-only opcode, shows you the result, and only opens an issue if
-you agree. The device-info block is redacted first because it carries your
-serial number and Bluetooth address. You can run it directly too:
+If your device is not verified, the panel offers **Help us add support** or
+**Help us finish support**. The guided flow sweeps every read-only opcode, then
+asks you to select each equaliser preset in Nothing X and reads its raw id back
+after you close the app. It produces one redacted report and only opens an issue
+if you agree. It can also apply what you confirmed as a local hotfix, without
+waiting for a release. The device-info block is redacted first because it
+carries your serial number and Bluetooth address. You can run it directly too:
 
 ```sh
-./tools/report-device.sh
+./tools/map-device.sh
 ```
 
-Mapping a new model needs one more thing the probe cannot do: someone setting
-each equaliser id and reading the label back from the Nothing X app. That is
-how Ear (a)'s ids were established, and it is the only way to be sure — see
-the equaliser note under Protocol.
+Mapping the equaliser is optional: decline it and the run is a plain device
+report, which is enough to get a model added.
+
+The hotfix offers only the presets you confirmed; the rest stay hidden, as does
+bass enhance, because its `level * 2` write encoding is model-specific and the
+mapping flow cannot establish it.
 
 ## Design
 
@@ -69,7 +81,7 @@ Service.qml            session lifecycle, state, optimistic actions
 Model.js               parsing and formatting -- no QML imports, unit tested
 NothingEarIcon.qml     drawn earbud silhouette
 helper/nothing_ear.py  RFCOMM client, stdlib only
-tools/report-device.sh probe an unmapped device and offer to file an issue
+tools/map-device.sh    probe, optional equaliser mapping, report, local hotfix
 tests/                 deno test over Model.js, unittest over the protocol
 ```
 

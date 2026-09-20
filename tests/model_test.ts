@@ -11,7 +11,7 @@ const Model = new Function(`
   ${source}
   return {
     LEVEL_UNKNOWN, parseStatus, defaultStatus, defaultPod, normalizePod,
-    ancLabel, eqLabel, nextAncMode, levelText, levelFraction, podMeta,
+    ancLabel, eqLabel, eqPresetsFor, nextAncMode, levelText, levelFraction, podMeta,
     isLow, batteryRows, lowestLevel, elideError
   }
 `)() as Record<string, any>
@@ -60,6 +60,42 @@ Deno.test("a complete status parses every field", () => {
   assertEquals(status.battery.right.charging, true)
   assertEquals(status.anc.mode, "transparency")
   assertEquals(status.eq.preset, "balanced")
+})
+
+Deno.test("model support state is preserved only for known states", () => {
+  assertEquals(Model.parseStatus(statusJson({
+    model: { base: "B999", name: "Example", known: true, support: "identified" },
+  })).model.support, "identified")
+  assertEquals(Model.parseStatus(statusJson({
+    model: { base: "B999", name: "Example", known: true, support: "pending" },
+  })).model.support, "unknown")
+})
+
+Deno.test("only the presets the helper confirms are offered", () => {
+  const status = Model.parseStatus(statusJson({
+    eq: { preset: "balanced", presets: ["more_bass", "balanced"], available: true },
+  }))
+  assertEquals(status.eq.presets, ["more_bass", "balanced"])
+  assertEquals(Model.eqPresetsFor(status).map((row: any) => row.key),
+    ["balanced", "more_bass"])
+})
+
+Deno.test("unrecognised or missing preset names are dropped", () => {
+  assertEquals(Model.parseStatus(statusJson({
+    eq: { preset: "balanced", presets: ["balanced", "sparkle", "balanced"], available: true },
+  })).eq.presets, ["balanced"])
+
+  const absent = Model.parseStatus(statusJson({
+    eq: { preset: "balanced", available: true },
+  }))
+  assertEquals(absent.eq.presets, [])
+  assertEquals(Model.eqPresetsFor(absent), [])
+
+  for (const presets of ["balanced", 3, {}, null]) {
+    assertEquals(Model.parseStatus(statusJson({
+      eq: { preset: "balanced", presets, available: true },
+    })).eq.presets, [])
+  }
 })
 
 Deno.test("missing case data is treated as unknown, not zero", () => {

@@ -3,6 +3,9 @@
 # durable findings live in README.md instead.
 knowledge/
 
+# Locally confirmed device mappings, written by tools/map-device.sh.
+helper/models.local.json
+
 # Python bytecode from running the helper or its tests in place.
 __pycache__/
 *.py[cod]
