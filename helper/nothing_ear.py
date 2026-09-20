@@ -110,6 +110,18 @@ MODELS = [
 ]
 
 
+# Offered first by a mapping run, so a common preset lands on a key the plugin
+# already knows. Kept in step with EQ_PRESETS in Model.js by a test.
+STANDARD_PRESETS = [
+  ("balanced", "Balanced"),
+  ("more_bass", "More bass"),
+  ("more_treble", "More treble"),
+  ("voice", "Voice"),
+  ("dirac", "Dirac Opteo"),
+  ("custom", "Custom"),
+]
+
+
 def valid_pattern(pattern):
   if not isinstance(pattern, str):
     return False
@@ -426,13 +438,19 @@ def parse_anc(payload):
 
 def parse_eq(payload, model):
   # `presets` is what the panel may offer: an overlay can confirm only some.
-  presets = sorted(model.get("eq") or {})
+  # `presetLabels` is what the device's own app calls a preset a run named.
+  table = model.get("eq") or {}
+  presets = sorted(table)
+  labels = {name: str(text) for name, text in (model.get("eq_labels") or {}).items()
+            if name in table}
   if not payload:
-    return {"preset": "", "raw": None, "presets": presets, "available": False}
+    return {"preset": "", "raw": None, "presets": presets,
+            "presetLabels": labels, "available": False}
   return {
     "preset": eq_names_for(model).get(payload[0], "unknown"),
     "raw": payload[0],
     "presets": presets,
+    "presetLabels": labels,
     "available": True,
   }
 
@@ -683,7 +701,8 @@ def blank_status(address, bluez):
     "firmware": "",
     "battery": {},
     "anc": {"mode": "", "raw": None, "level": None, "available": False},
-    "eq": {"preset": "", "raw": None, "presets": [], "available": False},
+    "eq": {"preset": "", "raw": None, "presets": [], "presetLabels": {},
+           "available": False},
     "bass": {"enabled": False, "level": None, "available": False},
     "model": {"base": "unknown", "name": "", "known": False},
     "latency": {"enabled": False, "available": False},
@@ -718,15 +737,25 @@ def redact(opcode, payload):
   return "redacted; fields: " + "; ".join(rows) if rows else "redacted"
 
 
-def probe(session, address, bluez, model):
+PROBE_TOTAL = 0x100
+
+
+def probe(session, address, bluez, model, progress=False):
   """Collect everything a new device will answer, as a pasteable report.
 
   Only GET is sent. The point is that someone with hardware we cannot buy can
   run one command and hand back enough to map their model, without having to
   understand the protocol.
+
+  With `progress`, each opcode is counted on stderr as `done/total`. The sweep
+  takes about a minute, which looks identical to a hang without it. stdout
+  stays the report alone.
   """
   answers = []
-  for opcode in range(0x00, 0x100):
+  for opcode in range(0x00, PROBE_TOTAL):
+    if progress:
+      sys.stderr.write("%d/%d\n" % (opcode + 1, PROBE_TOTAL))
+      sys.stderr.flush()
     if opcode in PROBE_SKIP:
       continue
     try:
@@ -942,7 +971,8 @@ def run(args):
         time.sleep(RETRY_AFTER_WRITE)
         result["inEar"] = parse_in_ear(session.request(CMD_IED_GET, DIR_GET) or b"")
       elif args.command == "probe":
-        sys.stdout.write(probe(session, address, bluez, model) + "\n")
+        sys.stdout.write(
+          probe(session, address, bluez, model, args.progress) + "\n")
         return None
       elif args.command == "listen":
         session.drain(args.seconds)
@@ -987,6 +1017,8 @@ def main(argv=None):
   parser.add_argument("--device", default="", help="Bluetooth address; auto-detected when omitted")
   parser.add_argument("--channel", type=int, default=0,
                       help="override the channel the detected model implies")
+  parser.add_argument("--progress", action="store_true",
+                      help="count probe opcodes on stderr as done/total")
   parser.add_argument("--seconds", type=float, default=20.0, help="listen/watch duration")
   parser.add_argument("--battery-interval", type=float, default=60.0,
                       help="seconds between battery re-reads while watching")

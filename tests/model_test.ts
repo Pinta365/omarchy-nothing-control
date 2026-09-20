@@ -80,9 +80,65 @@ Deno.test("only the presets the helper confirms are offered", () => {
     ["balanced", "more_bass"])
 })
 
-Deno.test("unrecognised or missing preset names are dropped", () => {
+Deno.test("a preset the device named itself is offered and labelled", () => {
+  const status = Model.parseStatus(statusJson({
+    eq: { preset: "super_bass", presets: ["balanced", "super_bass"], available: true },
+  }))
+  assertEquals(status.eq.presets, ["balanced", "super_bass"])
+  assertEquals(Model.eqPresetsFor(status).map((row: any) => [row.key, row.label]),
+    [["balanced", "Balanced"], ["super_bass", "Super bass"]])
+  assertEquals(status.eq.preset, "super_bass", "the selected chip still matches")
+})
+
+Deno.test("the app's own label is used when the device supplied one", () => {
+  const status = Model.parseStatus(statusJson({
+    eq: {
+      preset: "cmf_signature",
+      presets: ["balanced", "cmf_signature"],
+      presetLabels: { cmf_signature: "CMF Signature", balanced: "Standard" },
+      available: true,
+    },
+  }))
+  // A confirmed label wins over ours, including for a name we ship.
+  assertEquals(Model.eqPresetsFor(status).map((row: any) => row.label),
+    ["Standard", "CMF Signature"])
+})
+
+Deno.test("unusable labels fall back rather than rendering junk", () => {
+  const status = Model.parseStatus(statusJson({
+    eq: {
+      preset: "balanced",
+      presets: ["balanced", "super_bass"],
+      presetLabels: { balanced: "   ", super_bass: 7, ghost: "Not a preset" },
+      available: true,
+    },
+  }))
+  assertEquals(status.eq.presetLabels, {})
+  assertEquals(Model.eqPresetsFor(status).map((row: any) => row.label),
+    ["Balanced", "Super bass"])
+
+  const messy = Model.parseStatus(statusJson({
+    eq: {
+      preset: "super_bass",
+      presets: ["super_bass"],
+      presetLabels: { super_bass: "  Deep\n\tBass " + "x".repeat(60) + "  " },
+      available: true,
+    },
+  }))
+  const label = Model.eqPresetsFor(messy)[0].label
+  assertEquals(label.length, 32)
+  assertEquals(label.startsWith("Deep Bass x"), true)
+})
+
+Deno.test("malformed or missing preset names are dropped", () => {
+  // Shape only; "unknown" is the helper's sentinel for an id it could not name.
   assertEquals(Model.parseStatus(statusJson({
-    eq: { preset: "balanced", presets: ["balanced", "sparkle", "balanced"], available: true },
+    eq: {
+      preset: "balanced",
+      presets: ["balanced", "More Bass", "has space", "x".repeat(33), "", "unknown", 7, null,
+                "balanced"],
+      available: true,
+    },
   })).eq.presets, ["balanced"])
 
   const absent = Model.parseStatus(statusJson({

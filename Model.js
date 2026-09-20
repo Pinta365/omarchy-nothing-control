@@ -55,7 +55,7 @@ function defaultStatus() {
     firmware: "",
     battery: {},
     anc: { mode: "", level: null, available: false },
-    eq: { preset: "", presets: [], available: false },
+    eq: { preset: "", presets: [], presetLabels: {}, available: false },
     bass: { enabled: false, level: null, available: false },
     model: { base: "unknown", name: "", known: false, support: "unknown" },
     latency: { enabled: false, available: false },
@@ -122,8 +122,9 @@ function parseStatus(raw) {
 
   var eq = parsed.eq && typeof parsed.eq === "object" ? parsed.eq : {}
   status.eq = {
-    preset: isKnownEqPreset(eq.preset) ? eq.preset : "",
-    presets: knownEqPresets(eq.presets),
+    preset: normalizeEqPresets([eq.preset])[0] || "",
+    presets: normalizeEqPresets(eq.presets),
+    presetLabels: normalizeEqLabels(eq.presetLabels, normalizeEqPresets(eq.presets)),
     available: eq.available === true
   }
 
@@ -176,25 +177,49 @@ function isKnownEqPreset(preset) {
   return false
 }
 
-// Only what the helper reports as mapped. Anything else would be a guess.
-function knownEqPresets(presets) {
+// Unrecognised names are kept -- a device can have presets we have never seen
+// -- but the shape is checked: the name is both a table key and a label.
+function normalizeEqPresets(presets) {
   var out = []
   if (!Array.isArray(presets)) return out
   for (var i = 0; i < presets.length; i++) {
-    if (isKnownEqPreset(presets[i]) && out.indexOf(presets[i]) === -1) {
-      out.push(presets[i])
-    }
+    var name = presets[i]
+    if (typeof name !== "string" || !/^[a-z0-9_]{1,32}$/.test(name)) continue
+    if (name !== "unknown" && out.indexOf(name) === -1) out.push(name)
   }
   return out
 }
 
-// Rows in the order the panel lists them, limited to the confirmed presets.
+// Rendered text from a hand-editable file, so it is checked and capped.
+function normalizeEqLabels(labels, presets) {
+  var out = {}
+  if (!labels || typeof labels !== "object") return out
+  for (var i = 0; i < presets.length; i++) {
+    var text = labels[presets[i]]
+    if (typeof text !== "string") continue
+    text = text.replace(/\s+/g, " ").trim().slice(0, 32)
+    if (text !== "") out[presets[i]] = text
+  }
+  return out
+}
+
+// Ours first, in the order the panel lists them, then any the device named.
 function eqPresetsFor(status) {
-  var names = status && status.eq ? status.eq.presets : null
+  var eq = status && status.eq ? status.eq : null
+  if (!eq || !eq.presets) return []
+  var labels = eq.presetLabels || {}
   var out = []
-  if (!names) return out
   for (var i = 0; i < EQ_PRESETS.length; i++) {
-    if (names.indexOf(EQ_PRESETS[i].key) !== -1) out.push(EQ_PRESETS[i])
+    var known = EQ_PRESETS[i]
+    if (eq.presets.indexOf(known.key) !== -1) {
+      out.push({ key: known.key, label: labels[known.key] || known.label })
+    }
+  }
+  for (var j = 0; j < eq.presets.length; j++) {
+    var name = eq.presets[j]
+    if (!isKnownEqPreset(name)) {
+      out.push({ key: name, label: labels[name] || eqLabel(name) })
+    }
   }
   return out
 }
@@ -210,7 +235,9 @@ function eqLabel(preset) {
   for (var i = 0; i < EQ_PRESETS.length; i++) {
     if (EQ_PRESETS[i].key === preset) return EQ_PRESETS[i].label
   }
-  return "Unknown"
+  var text = String(preset || "").replace(/_/g, " ").trim()
+  if (text === "") return "Unknown"
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 function nextAncMode(current) {

@@ -35,8 +35,9 @@ stay hidden rather than lie.
 
 If your device is not verified, the panel offers **Help us add support** or
 **Help us finish support**. The guided flow sweeps every read-only opcode, then
-asks you to select each equaliser preset in Nothing X and reads its raw id back
-after you close the app. It produces one redacted report and only opens an issue
+asks you to select each equaliser preset in Nothing X, name it, and reads its raw
+id back after you close the app. The names are yours to give, so a device whose
+presets differ from Nothing's -- CMF's, for instance -- maps just the same. It produces one redacted report and only opens an issue
 if you agree. It can also apply what you confirmed as a local hotfix, without
 waiting for a release. The device-info block is redacted first because it
 carries your serial number and Bluetooth address. You can run it directly too:

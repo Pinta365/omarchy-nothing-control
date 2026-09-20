@@ -12,82 +12,183 @@ PLUGIN_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/pinta365.nothing-c
 REPORT="$(mktemp -t nothing-control-mapping-XXXXXX.md)"
 STATUS="$(mktemp -t nothing-control-status-XXXXXX.json)"
 MAPPINGS="$(mktemp -t nothing-control-eq-XXXXXX.json)"
+EQREAD="$(mktemp -t nothing-control-read-XXXXXX.json)"
+PROGRESS="$(mktemp -t nothing-control-progress-XXXXXX.txt)"
+
+SPINNER_PID=""
+
+# Only on a terminal: piped output would get a smear of carriage returns.
+start_spinner() {
+  if [[ ! -t 1 ]]; then
+    printf '%s\n' "$1"
+    return
+  fi
+  (
+    frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+    i=0
+    started=$SECONDS
+    printf '\033[?25l'
+    while :; do
+      # Nothing until there is something true to show: the count exists only
+      # once the sweep starts, and 0s while the channel opens is noise.
+      detail=""
+      if [[ -n "${2:-}" ]]; then
+        [[ -s "$2" ]] && detail="  $(tail -n 1 "$2") opcodes"
+      elif (( SECONDS - started >= 2 )); then
+        detail="  $((SECONDS - started))s"
+      fi
+      printf '\r\033[K  %s %s%s ' "${frames[i % 10]}" "$1" "$detail"
+      i=$((i + 1))
+      sleep 0.1
+    done
+  ) &
+  SPINNER_PID=$!
+}
+
+stop_spinner() {
+  [[ -n "$SPINNER_PID" ]] || return 0
+  kill "$SPINNER_PID" 2>/dev/null
+  wait "$SPINNER_PID" 2>/dev/null
+  SPINNER_PID=""
+  [[ -t 1 ]] && printf '\r\033[K\033[?25h'
+  return 0
+}
 
 cleanup() {
-  rm -f "$STATUS" "$MAPPINGS"
+  stop_spinner
+  rm -f "$STATUS" "$MAPPINGS" "$EQREAD" "$PROGRESS"
 }
 trap cleanup EXIT
 
 printf '%s\n\n' "This checks a new device without changing its settings."
 printf '%s\n\n' "Close the panel and Nothing X before each reading: only one app can use the control channel."
-printf '%s\n\n' "Probing the earbuds. This sweeps every read-only opcode and takes about a minute."
+printf '%s\n\n' "The bar also checks the battery every few minutes. If a read fails as busy, just try it again."
+printf '%s\n' "The probe sweeps every read-only opcode and takes about a minute."
+read -rp "Press enter to start it. "
+printf '\n'
 
-if ! /usr/bin/python3 "$HELPER" probe > "$REPORT" 2>&1; then
+/usr/bin/python3 "$HELPER" probe --progress > "$REPORT" 2> "$PROGRESS" &
+probe_job=$!
+start_spinner "Probing the earbuds" "$PROGRESS"
+wait "$probe_job"
+probe_rc=$?
+stop_spinner
+
+if [[ $probe_rc -ne 0 ]]; then
   printf 'The probe failed. Are the earbuds connected, and is the panel closed?\n\n'
   cat "$REPORT"
+  grep -v '^[0-9]\+/[0-9]\+$' "$PROGRESS"
   read -rp 'Press enter to close. '
   exit 1
 fi
+printf 'Probe complete.\n'
 
-if ! /usr/bin/python3 "$HELPER" status > "$STATUS"; then
+/usr/bin/python3 "$HELPER" status > "$STATUS" &
+status_job=$!
+start_spinner "Reading device status"
+wait "$status_job"
+status_rc=$?
+stop_spinner
+
+if [[ $status_rc -ne 0 ]]; then
   printf 'Could not read the device status after probing.\n'
   read -rp 'Press enter to close. '
   exit 1
 fi
 
-printf '%s\n\n' "The probe is complete."
 printf '%s\n' "Mapping the equaliser is optional, and it is the one thing the probe cannot"
 printf '%s\n' "do on its own: each preset has to be chosen in Nothing X and read back here."
 printf '%s\n\n' "Say no to go straight to the report."
 
 printf '{}' > "$MAPPINGS"
 
-# An empty list skips the loop, leaving a plain device report. Expressed this
-# way because the heredocs inside the loop have to start at column 0.
-PRESETS=()
 read -rp "Map equaliser presets now? [y/N] " reply
 if [[ ${reply,,} == "y" ]]; then
-  PRESETS=("balanced:Balanced" "more_bass:More bass" "more_treble:More treble"
-           "voice:Voice" "dirac:Dirac Opteo" "custom:Custom")
-  printf '\n%s\n' "For each preset you use, choose it in Nothing X, close Nothing X, then return here."
-  printf '%s\n\n' "Skip any preset your device does not offer."
+  printf '\n%s\n' "For each preset: say which one it is, then select it in Nothing X and"
+  printf '%s\n' "close the app. Nothing is assumed about which presets your device has, so"
+  printf '%s\n' "if yours is not in the list, just type its name."
 fi
 
-for entry in ${PRESETS[@]+"${PRESETS[@]}"}; do
-  key="${entry%%:*}"
-  label="${entry#*:}"
-  read -rp "Map \"$label\"? [y/N] " reply
-  if [[ ${reply,,} != "y" ]]; then
-    continue
-  fi
+# Named before it is read, so the prompt can say which preset to go and select.
+while [[ ${reply,,} == "y" ]]; do
+  printf '\n'
+  /usr/bin/python3 - "$HERE/helper" <<'MENU'
+import sys
+sys.path.insert(0, sys.argv[1])
+import nothing_ear as ne
 
-  read -rp "Select \"$label\" in Nothing X, close the app, then press enter here. "
-  if ! raw="$(/usr/bin/python3 "$HELPER" read-eq)"; then
-    printf 'Could not read the equaliser value; skipping "%s".\n' "$label"
-    continue
-  fi
-  if ! /usr/bin/python3 - "$MAPPINGS" "$key" "$raw" <<'PY'
+print("Which preset are you mapping?")
+for index, (_, text) in enumerate(ne.STANDARD_PRESETS, 1):
+  print("  %d) %s" % (index, text))
+MENU
+  read -rp "Number, or the name your app uses: " choice
+  if ! chosen="$(/usr/bin/python3 - "$HERE/helper" "$MAPPINGS" "$choice" <<'RESOLVE'
+import json
+import re
+import sys
+
+helper_dir, path, choice = sys.argv[1:]
+sys.path.insert(0, helper_dir)
+import nothing_ear as ne
+
+choice = " ".join(choice.split())
+# A number picks a standard preset; anything else is the name itself.
+if choice.isdigit():
+  index = int(choice)
+  if not 1 <= index <= len(ne.STANDARD_PRESETS):
+    sys.exit("there is no preset numbered %d" % index)
+  name, label = ne.STANDARD_PRESETS[index - 1]
+else:
+  # The key is reduced to the shape the shipped names use.
+  label = choice
+  name = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:32]
+if not name or name == "unknown":
+  sys.exit('"%s" cannot be used as a preset name' % choice)
+with open(path, encoding="utf-8") as stream:
+  if name in json.load(stream):
+    sys.exit('"%s" is already mapped' % label)
+print("%s\t%s" % (name, label))
+RESOLVE
+  )"; then
+    printf 'Not recorded.\n'
+  else
+    name="${chosen%%$'\t'*}"
+    label="${chosen#*$'\t'}"
+    read -rp "Now select \"$label\" in Nothing X, close the app, then press enter here. "
+
+    /usr/bin/python3 "$HELPER" read-eq > "$EQREAD" 2>/dev/null &
+    eq_job=$!
+    start_spinner "Reading the equaliser"
+    wait "$eq_job"
+    eq_rc=$?
+    stop_spinner
+
+    if [[ $eq_rc -ne 0 ]]; then
+      printf 'Could not read the equaliser value. Is Nothing X closed?\n'
+    elif ! /usr/bin/python3 - "$MAPPINGS" "$name" "$label" "$(cat "$EQREAD")" <<'STORE'
 import json
 import sys
 
-path, key, payload = sys.argv[1:]
+path, name, label, payload = sys.argv[1:]
 result = json.loads(payload)
 raw = result.get("eq", {}).get("raw")
 if not result.get("ok") or not isinstance(raw, int):
-  raise SystemExit(1)
+  sys.exit("the helper did not return a usable equaliser id")
 with open(path, "r+", encoding="utf-8") as stream:
   mappings = json.load(stream)
-  if raw in mappings.values():
-    raise SystemExit("that raw id is already mapped; check the selected preset")
-  mappings[key] = raw
+  if any(entry["id"] == raw for entry in mappings.values()):
+    sys.exit("id %d is already mapped; was a different preset selected?" % raw)
+  mappings[name] = {"id": raw, "label": label}
   stream.seek(0)
   json.dump(mappings, stream, sort_keys=True)
   stream.truncate()
-PY
-  then
-    printf 'The helper did not return a usable, unique EQ id; skipping "%s".\n' "$label"
-    continue
+print('Recorded "%s" as id %d.' % (label, raw))
+STORE
+    then
+      printf 'Not recorded.\n'
+    fi
   fi
+  read -rp "Map another preset? [y/N] " reply
 done
 
 /usr/bin/python3 - "$STATUS" "$MAPPINGS" "$REPORT" <<'PY'
@@ -102,9 +203,9 @@ with open(mappings_path, encoding="utf-8") as stream:
 with open(report_path, "a", encoding="utf-8") as stream:
   stream.write("\n\n### Equaliser verification\n\n")
   if mappings:
-    stream.write("| Nothing X label | Raw EQ id |\n| --- | --- |\n")
-    for label, raw in mappings.items():
-      stream.write(f"| {label.replace('_', ' ')} | `{raw}` |\n")
+    stream.write("| Nothing X label | Key | Raw EQ id |\n| --- | --- | --- |\n")
+    for name, entry in sorted(mappings.items()):
+      stream.write(f"| {entry['label']} | `{name}` | `{entry['id']}` |\n")
     stream.write("\nThe values above were selected in Nothing X, then read after closing it.\n")
   else:
     stream.write("No equaliser presets were verified in this run.\n")
@@ -124,7 +225,9 @@ with open(sys.argv[1], encoding="utf-8") as stream:
 PY
 ) == "yes" ]]; then
   read -rp "Apply the confirmed EQ mapping as a local hotfix? [y/N] " reply
-  if [[ ${reply,,} == "y" ]] && /usr/bin/python3 - "$STATUS" "$MAPPINGS" \
+  hotfix_rc=0
+  if [[ ${reply,,} == "y" ]]; then
+    /usr/bin/python3 - "$STATUS" "$MAPPINGS" \
       "$PLUGIN_DIR/helper/models.local.json" <<'PY'
 import json
 import os
@@ -142,8 +245,9 @@ if not name or not mappings:
 model = status.get("model") or {}
 # A partial run over a verified model would narrow it, so refuse.
 if model.get("support") == "verified":
-  raise SystemExit("%s is already verified; a local hotfix would only narrow it"
-                   % (model.get("name") or name))
+  print("%s is already verified; a local hotfix would only narrow it"
+        % (model.get("name") or name), file=sys.stderr)
+  sys.exit(3)
 base = str(model.get("base") or "unknown")
 if base == "unknown":
   base = "local:" + name
@@ -154,7 +258,8 @@ override = {
   "pattern": "^" + re.escape(name.lower()) + "$",
   "channel": 15,
   "support": "identified",
-  "eq": mappings,
+  "eq": {name: entry["id"] for name, entry in mappings.items()},
+  "eq_labels": {name: entry["label"] for name, entry in mappings.items()},
 }
 try:
   with open(output_path, encoding="utf-8") as stream:
@@ -174,10 +279,14 @@ with open(output_path, "w", encoding="utf-8") as stream:
   json.dump(overrides, stream, indent=2)
   stream.write("\n")
 PY
-  then
-    printf 'Local hotfix saved. Reopen the panel to load the confirmed EQ controls.\n'
-  else
-    printf 'Could not save the local hotfix; the issue report is still available below.\n'
+    hotfix_rc=$?
+    if [[ $hotfix_rc -eq 0 ]]; then
+      printf 'Local hotfix saved. Reopen the panel to load the confirmed EQ controls.\n'
+    elif [[ $hotfix_rc -eq 3 ]]; then
+      printf 'No hotfix needed, for the reason above. The report is still below.\n'
+    else
+      printf 'Could not save the local hotfix; the report is still below.\n'
+    fi
   fi
 else
   printf 'No EQ mappings were confirmed, so no local hotfix is available.\n'

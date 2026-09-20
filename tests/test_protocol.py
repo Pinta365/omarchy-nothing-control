@@ -5,6 +5,7 @@ Standard library only, matching the helper itself:
 """
 
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -198,6 +199,16 @@ class ModelDetection(unittest.TestCase):
     self.assertEqual(ne.parse_eq(bytes([3]), {"eq": {"balanced": 0, "more_bass": 3}})["presets"],
                      ["balanced", "more_bass"])
     self.assertEqual(ne.parse_eq(bytes([3]), ne.UNKNOWN_MODEL)["presets"], [])
+
+
+class StandardPresets(unittest.TestCase):
+  def test_the_offered_names_match_the_ones_the_panel_renders(self):
+    """Two files, one list: a preset added to only one would map but not show."""
+    model_js = os.path.join(os.path.dirname(__file__), "..", "Model.js")
+    with open(model_js, encoding="utf-8") as stream:
+      block = re.search(r"var EQ_PRESETS = \[(.*?)\]", stream.read(), re.S).group(1)
+    rendered = re.findall(r'key:\s*"([^"]+)",\s*label:\s*"([^"]+)"', block)
+    self.assertEqual(rendered, [list(p) and tuple(p) for p in ne.STANDARD_PRESETS])
 
 
 class LocalModelOverlay(unittest.TestCase):
