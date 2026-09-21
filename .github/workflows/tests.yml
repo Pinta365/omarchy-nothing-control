@@ -1,0 +1,58 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # The validator is a self-contained script; pin it so upstream cannot change
+  # what this repo is checked against without a commit here.
+  OMARCHY_REF: v4.0.4
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Stdlib only, and the helper only touches Bluetooth inside a session,
+      # so a runner with no adapter runs these fine.
+      - name: Protocol tests
+        run: python3 -m unittest discover -s tests -v
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Model tests
+        run: deno test --allow-read tests/model_test.ts
+
+      - name: Shell syntax
+        run: |
+          for script in tools/*.sh; do
+            bash -n "$script"
+          done
+
+      - name: Shell lint
+        run: shellcheck tools/*.sh
+
+      # Imports from the Omarchy shell cannot resolve here, which qmllint
+      # reports as warnings; syntax errors are still errors and still fail.
+      - name: QML lint
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qt6-declarative-dev-tools
+          qmllint="$(command -v qmllint6 || command -v qmllint \
+            || echo /usr/lib/qt6/bin/qmllint)"
+          "$qmllint" --version
+          "$qmllint" Panel.qml Service.qml NothingEarIcon.qml
+
+      - name: Plugin manifest
+        run: |
+          curl -fsSL -o /tmp/omarchy-plugin-validate \
+            "https://raw.githubusercontent.com/basecamp/omarchy/${OMARCHY_REF}/bin/omarchy-plugin-validate"
+          bash /tmp/omarchy-plugin-validate .

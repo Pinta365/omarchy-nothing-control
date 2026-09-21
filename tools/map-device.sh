@@ -324,6 +324,7 @@ else
   note "No EQ mappings were confirmed, so no local hotfix is available."
 fi
 
+# shellcheck disable=SC2016 # literal markdown backticks and a sed anchor
 TITLE="Device support: $(sed -n 's/^| Bluetooth name | `\(.*\)` |$/\1/p' "$REPORT" | head -1)"
 
 printf '\n'
