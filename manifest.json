@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Pinta365",
   "license": "MIT",
-  "description": "Nothing and CMF earbuds in the Omarchy bar: per-earbud and case battery, noise control, equaliser and bass enhance.",
+  "description": "Nothing and CMF earbuds in the Omarchy bar: per-earbud and case battery, noise control, equaliser presets, bass enhance, low latency, wear detection and a low battery warning. Talks to the earbuds directly over Bluetooth, with no daemon or extra app. Every model gets battery, noise control, latency and wear detection; the equaliser and bass unlock once a model is confirmed, and a guided tool maps yours.",
   "kinds": [
     "bar-widget"
   ],
