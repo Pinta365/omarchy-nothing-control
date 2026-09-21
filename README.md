@@ -100,10 +100,24 @@ omarchy plugin add https://github.com/Pinta365/omarchy-nothing-control --enable
 Requires `bluez`, `bluez-utils`, and the earbuds paired normally. No packages
 to install: the helper is standard library only.
 
+The low battery warning is sent with `notify-send`, from `libnotify`. The
+mapping tool can file its report with the GitHub CLI (`gh`) and prints the issue
+link instead when it is missing. Everything else it calls ships with Omarchy.
+
 It must be invoked as **`/usr/bin/python3`**, never bare `python3`. Version
 managers (mise, pyenv, asdf) generally build CPython without Bluetooth socket
 support, so `socket.BTPROTO_RFCOMM` is simply absent there and the helper
 cannot open a connection at all.
+
+## Remove
+
+```sh
+omarchy plugin remove pinta365.nothing-control
+```
+
+That disables the plugin and deletes its folder, including any local device
+mapping. The only thing left behind is the last case battery reading, kept in
+`~/.local/state/nothing-control/`; delete that folder too for a clean removal.
 
 ## Development
 
