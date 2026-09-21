@@ -40,6 +40,8 @@ Panel {
   property int focusIndex: 0
   property bool cursorActive: false
 
+  onOpenedChanged: if (opened) cursorActive = false
+
   readonly property var ancModes: Model.ANC_MODES
   readonly property var eqPresets: Model.eqPresetsFor(ear.status)
   readonly property var toggles: Model.toggleRows(ear.status)
