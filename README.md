@@ -5,6 +5,8 @@ battery, noise control, equaliser presets, bass enhance, low latency and wear
 detection. Talks to the earbuds directly over Bluetooth RFCOMM — no daemon, no
 external CLI, nothing to install.
 
+![The panel open from the Omarchy bar, showing battery, noise control, equaliser and options](preview.png)
+
 Plugin id: `pinta365.nothing-control`. Status: in development.
 
 ## Device support
