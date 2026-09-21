@@ -24,6 +24,10 @@ rsync -a --delete --delete-excluded \
   --filter 'protect helper/models.local.json' \
   --exclude 'helper/models.local.json' \
   --exclude 'README.md' \
+  --exclude 'AGENTS.md' \
+  --exclude 'CLAUDE.md' \
+  --exclude 'docs' \
+  --exclude '.github' \
   --exclude 'LICENSE' \
   --exclude '.gitignore' \
   "$SRC/" "$DEST/"

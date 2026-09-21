@@ -53,6 +53,9 @@ The hotfix offers only the presets you confirmed; the rest stay hidden, as does
 bass enhance, because its `level * 2` write encoding is model-specific and the
 mapping flow cannot establish it.
 
+To go further and ship support for your device, by hand or with a coding agent,
+see [docs/adding-a-device.md](docs/adding-a-device.md).
+
 ## Design
 
 **Short-lived RFCOMM sessions, not a daemon.** Only one program may hold the
@@ -84,6 +87,8 @@ NothingEarIcon.qml     drawn earbud silhouette
 helper/nothing_ear.py  RFCOMM client, stdlib only
 tools/map-device.sh    probe, optional equaliser mapping, report, local hotfix
 tests/                 deno test over Model.js, unittest over the protocol
+docs/                  guide to adding a device
+AGENTS.md              orientation and rules for coding agents
 ```
 
 ## Install
