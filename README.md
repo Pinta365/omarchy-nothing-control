@@ -61,21 +61,21 @@ see [docs/adding-a-device.md](docs/adding-a-device.md).
 ## Design
 
 **Short-lived RFCOMM sessions, not a daemon.** Only one program may hold the
-Nothing control channel. A resident daemon makes this widget a permanent
-contender for it and locks out every other Nothing tool — which is why
-a resident daemon has to be stopped before any other tool can talk to the
-earbuds at all. Opening, asking and closing costs about a second and leaves the
-channel free.
+Nothing control channel, so a resident daemon would lock out every other
+Nothing tool for as long as it ran. Opening, asking and closing costs about a
+second and leaves the channel free.
 
-**Event-driven, not polled.** Refreshes are triggered by `Quickshell.Bluetooth`
-connect/battery signals. A closed panel costs nothing.
+**Read on connect, then on a slow clock.** The earbuds are read when they
+connect, with one retry, because BlueZ reports the link up slightly before the
+control channel answers. With the panel closed they are read again every five
+minutes (`backgroundPollSec`; 0 turns it off). That keeps the bar level current
+and is what lets the low battery warning fire when nobody is looking.
 
 **Live while you are looking.** The earbuds push a frame whenever something is
 changed on the device itself, so while the panel is open the helper holds the
 channel and streams changes as they happen — a pinch shows up immediately, with
 no polling. That channel is single-occupancy, so the watch is bounded, released
-the moment the panel closes, and stood down before any write. No other Nothing
-plugin does this.
+the moment the panel closes, and stood down before any write.
 
 **Degrades rather than disappears.** If the control channel is busy, the widget
 falls back to the BlueZ aggregate battery and says so.
