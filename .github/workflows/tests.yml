@@ -46,6 +46,19 @@ jobs:
             "https://raw.githubusercontent.com/basecamp/omarchy/${OMARCHY_REF}/bin/omarchy-plugin-validate"
           bash /tmp/omarchy-plugin-validate .
 
+      # The whole repo is cloned into users' plugin folders, so a file coding
+      # agents load on their own would steer the agents of everyone who installs.
+      - name: No agent instruction files
+        run: |
+          found="$(git ls-files | grep -iE \
+            '(^|/)(agents?|claude|claude\.local|gemini)\.md$|(^|/)\.(cursorrules|windsurfrules|clinerules)$|(^|/)\.cursor/rules/|^\.github/(copilot-instructions\.md$|instructions/)' \
+            || true)"
+          if [ -n "$found" ]; then
+            echo "These files are loaded by coding agents and must not ship:"
+            echo "$found"
+            exit 1
+          fi
+
   # Arch rather than Ubuntu: Ubuntu's Qt is far older than what Omarchy runs,
   # and its qmllint fails on warnings the current one only reports. Omarchy's
   # own imports cannot resolve here either way; syntax errors still fail.

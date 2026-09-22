@@ -89,8 +89,7 @@ NothingEarIcon.qml     drawn earbud silhouette
 helper/nothing_ear.py  RFCOMM client, stdlib only
 tools/map-device.sh    probe, optional equaliser mapping, report, local hotfix
 tests/                 deno test over Model.js, unittest over the protocol
-docs/                  guide to adding a device
-AGENTS.md              orientation and rules for coding agents
+docs/                  contributing guide and how to add a device
 ```
 
 ## Install

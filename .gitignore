@@ -14,3 +14,8 @@ __pycache__/
 *.swp
 *~
 .DS_Store
+
+# Files coding agents load on their own. Everything in the repo ships to users'
+# plugin folders, so these stay local; docs/contributing.md is the shared copy.
+AGENTS.md
+CLAUDE.md

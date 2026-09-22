@@ -4,8 +4,9 @@ For anyone with Nothing or CMF earbuds this plugin does not fully support yet.
 
 You can follow this yourself, but it was written with coding agents in mind:
 clone the repo, open it in Claude Code, Copilot, or a similar agent, and ask it
-to help you add your earbuds. It will read `AGENTS.md` and this guide, and ask
-you to confirm each value in the Nothing X app as it goes.
+to read `docs/adding-a-device.md` and help you add your earbuds. It will ask you
+to confirm each value in the Nothing X app as it goes. The rules it has to
+follow are in [contributing.md](contributing.md).
 
 There are two ways to help, and most people only need the first.
 
@@ -132,7 +133,7 @@ self.assertEqual(ne.resolve_model("Nothing Ear (a)")["base"], "B162")
 unrecognised, including `CMF Buds 2` and `Nothing Ear (3)`. If you just added
 one of those, move it out of that list.
 
-Then run the checks in `AGENTS.md`.
+Then run the checks in [contributing.md](contributing.md).
 
 ### 4. Document it
 
